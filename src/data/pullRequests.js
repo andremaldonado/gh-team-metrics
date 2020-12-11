@@ -13,11 +13,9 @@ const graphQLClient = new GraphQLClient(ghEndpoint, {
   })
 
 async function getData(users, startWeek, endWeek) {
-
   let data = []
 
   const promises = users.map(async (currentUser) => {
-
     let currentCursor = ''
     
     while (currentCursor != undefined) {
@@ -46,28 +44,33 @@ async function getData(users, startWeek, endWeek) {
         }
       `
 
-      const ghData = await graphQLClient.request(pullRequestsQuery)
-      ghData.user.pullRequests.edges.forEach((edge) => {
-        edge.node.user = currentUser
-        edge.node.week = getWeekNumber(new Date(edge.node.createdAt))
-        if (edge.node.week >= startWeek && edge.node.week <= endWeek)
-          data.push(edge.node)
-      })
-
-      currentCursor = undefined
-      if (ghData.user.pullRequests.edges.length > 0) {
-
-        let firstPR = ghData.user.pullRequests.edges[ghData.user.pullRequests.edges.length - 1]
-        currentCursor = firstPR.cursor
-
+      let ghData
+      try {
+        ghData = await graphQLClient.request(pullRequestsQuery)
+      } 
+      catch(e) {
+        console.error(e)
       }
 
-    }
+      currentCursor = undefined
 
+      if (ghData) {
+        ghData.user.pullRequests.edges.forEach((edge) => {
+          edge.node.user = currentUser
+          edge.node.week = getWeekNumber(new Date(edge.node.createdAt))
+          if (edge.node.week >= startWeek && edge.node.week <= endWeek)
+            data.push(edge.node)
+        })
+
+        if (ghData.user.pullRequests.edges.length > 0) {
+          let firstPR = ghData.user.pullRequests.edges[ghData.user.pullRequests.edges.length - 1]
+          currentCursor = firstPR.cursor
+        }
+      }
+    }
   })
 
   await Promise.all(promises)
-  console.table(data)
   return data
 
 }
