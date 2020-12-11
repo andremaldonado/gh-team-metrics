@@ -15,6 +15,4 @@ This is a simple script to help development teams understand stats based on gith
 
  - [ ] Avoid multiple iterations that is slowing down the script
  - [ ] Show stats based on repo's names
- - [ ] Show time to review stats
- - [ ] Show stats based on PR statuses
  - [ ] Show issues stats based on a repo's project

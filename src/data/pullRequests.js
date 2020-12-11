@@ -14,6 +14,7 @@ const graphQLClient = new GraphQLClient(ghEndpoint, {
 
 async function getData(users, startWeek, endWeek) {
   let data = []
+  let averageTimeToMerge = 0
 
   const promises = users.map(async (currentUser) => {
     let currentCursor = ''
@@ -27,7 +28,7 @@ async function getData(users, startWeek, endWeek) {
       let pullRequestsQuery = gql`
         {
           user(login: "${currentUser}") {
-            pullRequests(first: 50, orderBy: {field: CREATED_AT, direction: DESC}${currentCursor}) {
+            pullRequests(first: 50, orderBy: {field: CREATED_AT, direction: DESC}, states: MERGED${currentCursor}) {
               totalCount
               edges {
                 cursor
@@ -37,6 +38,7 @@ async function getData(users, startWeek, endWeek) {
                   repository {
                     name
                   }
+                  mergedAt
                 }
               }
             }
@@ -58,8 +60,12 @@ async function getData(users, startWeek, endWeek) {
         ghData.user.pullRequests.edges.forEach((edge) => {
           edge.node.user = currentUser
           edge.node.week = getWeekNumber(new Date(edge.node.createdAt))
-          if (edge.node.week >= startWeek && edge.node.week <= endWeek)
+          if (edge.node.week >= startWeek && edge.node.week <= endWeek) {
+            edge.node.timeToMerge = (Date.parse(edge.node.mergedAt) - Date.parse(edge.node.createdAt)) / 3600000
+            averageTimeToMerge += edge.node.timeToMerge
+            
             data.push(edge.node)
+          }
         })
 
         if (ghData.user.pullRequests.edges.length > 0) {
@@ -71,7 +77,32 @@ async function getData(users, startWeek, endWeek) {
   })
 
   await Promise.all(promises)
-  return data
+  averageTimeToMerge = averageTimeToMerge / data.length
+ 
+  let weeks = []
+  for (var i = startWeek; i <= endWeek; i++) {
+    const weekPullRequests = data.filter((prItem) => {
+      return prItem.week === i
+    })
+
+    let averageTimeToMerge = 0
+    weekPullRequests.forEach((pullRequest) => {
+      averageTimeToMerge += pullRequest.timeToMerge
+    })
+    averageTimeToMerge = averageTimeToMerge / weekPullRequests.length
+    
+    weeks.push({
+      "week": i, 
+      "prQuantity": weekPullRequests.length, 
+      "averageTimeToMerge": averageTimeToMerge
+    })
+  }
+
+  return { 
+    "allData": data, 
+    "weeks": weeks,
+    "averageTimeToMerge": parseInt(averageTimeToMerge) 
+  }
 
 }
 
@@ -95,26 +126,41 @@ async function showPeopleStats (prData, users) {
   console.table(prByUser)
 }
 
+function showAverageTimeToMerge(averageTimeToMerge) {
+  console.log("-------------------------------------------")
+  console.log(`Average time to merge: ${averageTimeToMerge} hours`)
+  console.log("-------------------------------------------")
+}
+
+async function showTimeToMergeGraph (prData, startWeek, endWeek) {
+  console.log(babar(
+    prData.map(week => {
+      return [week.week, week.averageTimeToMerge]
+    }), 
+    {
+      caption: "Time to merge PR from the last 3 months"
+    }
+  ))
+}
+
 async function showPullRequestsGraph (prData, startWeek, endWeek) {
-
-  let prByWeek = []
-  for (var i = startWeek; i <= endWeek; i++) {
-    const prQuantity = prData.filter((prItem) => {
-      return prItem.week === i
-    }).length
-    prByWeek.push([i,prQuantity])
-  }
-
-  console.log(babar(prByWeek, {
-    caption: "PRs do time nas últimas semanas"
-  }))
+  console.log(babar(
+    prData.map(week => {
+      return [week.week, week.prQuantity]
+    }), 
+    {
+      caption: "Team PR from the last 3 months (merged)"
+    }
+  ))
 }
 
 const pullRequests = async (users, start, end) => {
   let prData = await getData(users, start, end)
   console.clear()
-  showPullRequestsGraph(prData, start, end)
-  showPeopleStats(prData, users)
+  await showPullRequestsGraph(prData.weeks, start, end)
+  await showPeopleStats(prData.allData, users)
+  showAverageTimeToMerge(prData.averageTimeToMerge)
+  await showTimeToMergeGraph(prData.weeks, start, end)
 }
 
 export default pullRequests
