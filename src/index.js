@@ -3,7 +3,6 @@
 import yargs from 'yargs'
 import { hideBin } from 'yargs/helpers'
 
-import getWeekNumber from './helpers/date.js'
 import pullRequests from './data/pullRequests.js'
 
 const argv = yargs(hideBin(process.argv))
@@ -12,11 +11,11 @@ const argv = yargs(hideBin(process.argv))
   .demandOption(['user'])
   .argv
 const usersToFetch = argv.user
-const startWeek = getWeekNumber(new Date(Date.now() - 7776000000)) // 3 months
-const endWeek = getWeekNumber(new Date(Date.now()))
+const startDate = new Date(Date.now() - 7776000000) // 3 months
+const endDate = new Date(Date.now())
 
 pullRequests(
   usersToFetch,
-  startWeek,
-  endWeek
+  startDate,
+  endDate
 ).catch((error) => console.error(error))

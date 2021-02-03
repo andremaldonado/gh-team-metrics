@@ -1,6 +1,6 @@
 "use strict"
 
-import babar from 'babar'
+import asciichart from 'asciichart'
 import { GraphQLClient, gql } from 'graphql-request'
 
 import getWeekNumber from '../helpers/date.js'
@@ -12,9 +12,12 @@ const graphQLClient = new GraphQLClient(ghEndpoint, {
     },
   })
 
-async function getData(users, startWeek, endWeek) {
+async function getData(users, startDate, endDate) {
   let data = []
   let averageTimeToMerge = 0
+
+  startDate = new Date(startDate)
+  endDate = new Date(endDate)
 
   const promises = users.map(async (currentUser) => {
     let currentCursor = ''
@@ -60,10 +63,11 @@ async function getData(users, startWeek, endWeek) {
         ghData.user.pullRequests.edges.forEach((edge) => {
           edge.node.user = currentUser
           edge.node.week = getWeekNumber(new Date(edge.node.createdAt))
-          if (edge.node.week >= startWeek && edge.node.week <= endWeek) {
-            edge.node.timeToMerge = (Date.parse(edge.node.mergedAt) - Date.parse(edge.node.createdAt)) / 3600000
+
+          let createdAt = new Date(edge.node.createdAt)
+          if (createdAt >= startDate && createdAt <= endDate) {
+            edge.node.timeToMerge = (Date.parse(edge.node.mergedAt) - createdAt) / 3600000
             averageTimeToMerge += edge.node.timeToMerge
-            
             data.push(edge.node)
           }
         })
@@ -78,11 +82,17 @@ async function getData(users, startWeek, endWeek) {
 
   await Promise.all(promises)
   averageTimeToMerge = averageTimeToMerge / data.length
- 
+
   let weeks = []
-  for (var i = startWeek; i <= endWeek; i++) {
+  let currentDate = new Date(startDate)
+
+  while (currentDate < endDate) {
+    let nextDate = new Date(currentDate)
+    nextDate.setDate(nextDate.getDate() + 7)
+
     const weekPullRequests = data.filter((prItem) => {
-      return prItem.week === i
+      let createdAt = new Date(prItem.createdAt)
+      return createdAt >= currentDate && createdAt < nextDate
     })
 
     let averageTimeToMerge = 0
@@ -92,10 +102,12 @@ async function getData(users, startWeek, endWeek) {
     averageTimeToMerge = averageTimeToMerge / weekPullRequests.length
     
     weeks.push({
-      "week": i, 
+      "week": getWeekNumber(currentDate), 
       "prQuantity": weekPullRequests.length, 
-      "averageTimeToMerge": averageTimeToMerge
+      "averageTimeToMerge": averageTimeToMerge || 0
     })
+
+    currentDate = nextDate
   }
 
   return { 
@@ -133,24 +145,27 @@ function showAverageTimeToMerge(averageTimeToMerge) {
 }
 
 async function showTimeToMergeGraph (prData, startWeek, endWeek) {
-  console.log(babar(
+  console.log(asciichart.plot(
     prData.map(week => {
-      return [week.week, week.averageTimeToMerge]
+      return week.averageTimeToMerge
     }), 
-    {
-      caption: "Time to merge PR from the last 3 months"
+    { 
+      height: 10
     }
   ))
 }
 
 async function showPullRequestsGraph (prData, startWeek, endWeek) {
-  console.log(babar(
+  console.log("-------------------------------------------")
+  console.log('Pull requests by week')
+  console.log("-------------------------------------------")
+  console.log(asciichart.plot(
     prData.map(week => {
-      return [week.week, week.prQuantity]
-    }), 
-    {
-      caption: "Team PR from the last 3 months (merged)"
-    }
+      return week.prQuantity
+    }),
+   { 
+     height: 10 
+   } 
   ))
 }
 
